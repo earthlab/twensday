@@ -2,6 +2,10 @@
 
 library(tidyverse)
 library(gdalUtils)
+library(sf)
+# devtools::install_github("JoshOBrien/rasterDT")
+# devtools::install_github(repo = "mikoontz/rasterDT", ref = "masking-in-subsDT")
+library(rasterDT)
 
 source("R/download_grid.R")
 source("R/download_hazard.R")
@@ -33,26 +37,26 @@ if(!file.exists(hazard_path_out) | overwrite) {
   
   hazard_path_tmp <- file.path("data", "hazards", hazard_name, paste0(hazard_name, "_temp.tif"))
   
-  gdalwarp(srcfile = hazard_path_src, 
-           dstfile = hazard_path_tmp, 
-           t_srs = crs(empty_grid), 
-           tr = c(250, 250), 
-           overwrite = overwrite)
-  
-  gdalUtils::align_rasters(unaligned = hazard_path_tmp, 
+  # 8 minutes for the bilinear gdalwarp
+  gdalUtils::gdalwarp(srcfile = hazard_path_src, 
+                      dstfile = hazard_path_tmp, 
+                      t_srs = crs(empty_grid), 
+                      tr = c(250, 250), 
+                      overwrite = TRUE,
+                      r = "bilinear",
+                      srcnodata = 999)
+
+  # overwrite R object `hazard` to be the newly aligned and warped layer
+  hazard <- gdalUtils::align_rasters(unaligned = hazard_path_tmp, 
                            reference = empty_grid@file@name, 
-                           dstfile = hazard_path_out, 
-                           overwrite = overwrite)
+                           output_Raster = TRUE)
   
+  raster::NAvalue(hazard) <- -Inf
+  
+  # delete temporary raster file (the one that is just warped, but not yet aligned)
   unlink(hazard_path_tmp)
   
-  # for the flood layer, values of 999 appear to represent persistent water bodies
-  # we want to mask these out (and then use this mask for all other layers too)
-  hazard <- 
-    raster::raster(hazard_path_out) %>% 
-    raster::reclassify(rcl = cbind(999, NA))
-  
-  # we also want to mask outside of the boundaries of CONUS
+  # we want to mask outside of the boundaries of CONUS
   conus <- 
     USAboundaries::us_boundaries(type = "state", resolution = "high") %>%
     filter(!state_name %in% c("Alaska", "Hawaii") & jurisdiction_type == "state") %>%
@@ -63,12 +67,14 @@ if(!file.exists(hazard_path_out) | overwrite) {
     raster::mask(mask = hazard) # also mask based on persistent water bodies in the flood hazard layer
   
   # write the water mask to disk so we can use it for other layers
-  raster::writeRaster(x = mask, filename = file.path("output", "water-mask_zillow-grid.tif"))
+  raster::writeRaster(x = mask, 
+                      filename = file.path("output", "water-mask_zillow-grid.tif"),
+                      overwrite = TRUE)
   
   # Mask out the pixels outside of CONUS using the fire hazard layer
   # (which already properly counts "no hazard" as 0 and NA as "outside of CONUS")
   hazard <- raster::mask(x = hazard, mask = mask)
   
   # write to disk
-  raster::writeRaster(x = hazard, filename = hazard_path_out, overwrite = overwrite)
+  raster::writeRaster(x = hazard, filename = hazard_path_out, overwrite = TRUE)
 }

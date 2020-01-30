@@ -25,3 +25,7 @@ vignettes/*.pdf
 # Shiny token, see https://shiny.rstudio.com/articles/shinyapps.html
 rsconnect/
 twensday.Rproj
+.DS_Store
+output/
+figures/
+incubator/

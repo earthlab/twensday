@@ -7,6 +7,9 @@ library(raster)
 library(fasterize)
 library(lubridate)
 library(tidyverse)
+# devtools::install_github(repo = "JoshOBrien/rasterDT")
+library(rasterDT)
+library(gdalUtils)
 
 source("R/download_grid.R")
 source("R/download_hazard.R")
@@ -38,25 +41,25 @@ if(!file.exists(hazard_path_out) | overwrite) {
   
   hazard_orig <- raster::raster(hazard_path_src)
   
-  gdalwarp(srcfile = hazard_path_src, 
-           dstfile = hazard_path_tmp, 
-           t_srs = crs(empty_grid), 
-           tr = c(250, 250), 
-           overwrite = TRUE,
-           s_srs = crs(hazard_orig))
+  gdalUtils::gdalwarp(srcfile = hazard_path_src, 
+                      dstfile = hazard_path_tmp, 
+                      t_srs = crs(empty_grid), 
+                      tr = c(250, 250), 
+                      overwrite = TRUE,
+                      s_srs = crs(hazard_orig),
+                      r = "bilinear")
   
-  gdalUtils::align_rasters(unaligned = hazard_path_tmp, 
-                           reference = empty_grid@file@name, 
-                           dstfile = hazard_path_out, 
-                           overwrite = TRUE)
+  hazard <- gdalUtils::align_rasters(unaligned = hazard_path_tmp, 
+                                     reference = empty_grid@file@name, 
+                                     dstfile = hazard_path_out, 
+                                     overwrite = TRUE,
+                                     output_Raster = TRUE)
   
   unlink(hazard_path_tmp)
   
-  # Read the hazard layer using the raster package so we can mask it
+  # Make 0/NA handling consistent by using a 0 within CONUS for "no hazard"
   hazard <- 
-    raster::raster(hazard_path_out) %>% 
-    # Make 0/NA handling consistent by using a 0 within CONUS for "no hazard"
-    raster::reclassify(rcl = cbind(NA, 0))
+    rasterDT::subsDT(x = hazard, dict = data.table(by = NA, which = 0), subsWithNA = FALSE)
   
   # Mask out the pixels outside of CONUS using the water mask derived from the 
   # USAboundaries package high resolution CONUS shapefile (rasterized to the Zillow

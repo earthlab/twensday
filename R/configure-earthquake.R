@@ -37,16 +37,16 @@ if(!file.exists(hazard_path_out) | overwrite) {
            t_srs = crs(empty_grid), 
            tr = c(250, 250), 
            overwrite = TRUE,
-           s_srs = "EPSG:4326")
+           s_srs = "EPSG:4326",
+           r = "bilinear")
   
-  gdalUtils::align_rasters(unaligned = hazard_path_tmp, 
+  hazard <- gdalUtils::align_rasters(unaligned = hazard_path_tmp, 
                            reference = empty_grid@file@name, 
                            dstfile = hazard_path_out, 
-                           overwrite = TRUE)
+                           overwrite = TRUE,
+                           output_Raster = TRUE)
   
   unlink(hazard_path_tmp)
-  
-  hazard <- raster::raster(hazard_path_out)
   
   # Mask out the pixels outside of CONUS using the water mask derived from the 
   # USAboundaries package high resolution CONUS shapefile (rasterized to the Zillow
