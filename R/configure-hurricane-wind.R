@@ -39,7 +39,7 @@ if(!file.exists(hazard_path_out) | overwrite) {
   grid <- expand.grid(glat = seq(20, 
                                  50,
                                  by = 1), 
-                      glon = seq(-110,
+                      glon = seq(-180,
                                  -60,
                                  by = 1)) %>%
     as_tibble %>%
@@ -68,11 +68,14 @@ if(!file.exists(hazard_path_out) | overwrite) {
   grid_template <- raster(xmn = min(winds$glon), xmx = max(winds$glon), 
                           ymn = min(winds$glat), ymx = max(winds$glat), 
                           resolution = 1)
+  finer_template <- raster(ext = extent(grid_template), 
+                           resolution = 0.1)
   
-  hazard <- rasterize(gust_sf, grid_template, field = "mean_gust")
+  hazard <- rasterize(gust_sf, grid_template, field = "mean_gust") %>%
+    resample(finer_template)
   hazard_path_src <- "data/hurricane-gust.tif"
   hazard_path_tmp <- paste0(tempfile(), ".tif")
-  writeRaster(hazard, hazard_path_src)
+  writeRaster(hazard, hazard_path_src, overwrite = TRUE)
   
   hazard_orig <- raster::raster(hazard_path_src)
   
@@ -111,8 +114,3 @@ if(!file.exists(hazard_path_out) | overwrite) {
   raster::writeRaster(x = hazard, filename = hazard_path_out, overwrite = TRUE)
   
 }
-
-# Alternative source?
-# hazard_file <- "gdcyc/gdcyc.asc"
-# hazard_id <- '1whh-JSmF7v6vJm35lgQAAt5bs01Phb_t'
-# zip_path <- file.path("data", "hazards", "gdcyc_cyclone.zip")
