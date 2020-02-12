@@ -3,6 +3,12 @@
 library(tidyverse)
 library(raster)
 library(googledrive)
+library(stormwindmodel)
+library(hurricaneexposuredata)
+library(pbapply)
+library(sf)
+library(gdalUtils)
+
 
 # make the functions available to download the Zillow grid
 source("R/download_grid.R")
@@ -20,30 +26,56 @@ empty_grid <-
 # These set up the variables to be used to get the hazard data and name
 # new output files appropriately
 hazard_name <- "hurricane-wind"
-hazard_file <- "CycloneFrequency_1980_2000_projected/gdcyc_NAD.tif"
-zip_path <- file.path("data", "hazards", "CycloneFrequency_1980_2000_projected.zip")
-
-# The hurricane wind data is on the Google Drive
-hazard_id <- "1REzIWNeq4zwwZdiTT2YBa7UYXTYA-r2s"
 
 # Names of the files (to read and manipulate, and then what to call it upon
 # export)
-hazard_path_src <- file.path("data", "hazards", hazard_name, hazard_file)
 hazard_path_out <- file.path("output", "hazards", paste0(hazard_name, "_zillow-grid.tif"))
 
 overwrite <- FALSE
 
 if(!file.exists(hazard_path_out) | overwrite) {
   
-  # download the raw data from Google Drive
-  hazard_metadata <- googledrive::drive_get(id = hazard_id)
-  googledrive::drive_download(hazard_metadata, path = zip_path)
+  # generate hazard raster
+  grid <- expand.grid(glat = seq(20, 
+                                 50,
+                                 by = 1), 
+                      glon = seq(-180,
+                                 -60,
+                                 by = 1)) %>%
+    as_tibble %>%
+    mutate(gridid = as.character(1:n()))
   
-  # unzip the data file
-  unzip(zip_path, overwrite = FALSE, exdir = file.path("data", "hazards", hazard_name))
-  unlink(zip_path)
+  cl <- parallel::makeCluster(parallel::detectCores())
+  winds <- hurr_tracks %>%
+    split(.$storm_id) %>%
+    pblapply(get_grid_winds, grid_df = grid, cl = cl) %>%
+    bind_rows(.id = "id") %>%
+    as_tibble
+  parallel::stopCluster(cl)
   
-  hazard_path_tmp <- file.path("data", "hazards", hazard_name, paste0(hazard_name, "_temp.tif"))
+  annual_maxima <- winds %>%
+    separate(id, into = c("name", "year")) %>%
+    group_by(glat, glon, year) %>%
+    summarize(max_gust = max(vmax_gust)) %>%
+    ungroup 
+  mean_annual_maxima <- annual_maxima %>%
+    group_by(glat, glon) %>%
+    summarize(mean_gust = mean(max_gust))
+  
+  gust_sf <- mean_annual_maxima  %>% 
+    st_as_sf(coords = c("glon", "glat"),
+             crs = 4326)
+  grid_template <- raster(xmn = min(winds$glon), xmx = max(winds$glon), 
+                          ymn = min(winds$glat), ymx = max(winds$glat), 
+                          resolution = 1)
+  finer_template <- raster(ext = extent(grid_template), 
+                           resolution = 0.1)
+  
+  hazard <- rasterize(gust_sf, grid_template, field = "mean_gust") %>%
+    resample(finer_template)
+  hazard_path_src <- "data/hurricane-gust.tif"
+  hazard_path_tmp <- paste0(tempfile(), ".tif")
+  writeRaster(hazard, hazard_path_src, overwrite = TRUE)
   
   hazard_orig <- raster::raster(hazard_path_src)
   
@@ -82,8 +114,3 @@ if(!file.exists(hazard_path_out) | overwrite) {
   raster::writeRaster(x = hazard, filename = hazard_path_out, overwrite = TRUE)
   
 }
-
-# Alternative source?
-# hazard_file <- "gdcyc/gdcyc.asc"
-# hazard_id <- '1whh-JSmF7v6vJm35lgQAAt5bs01Phb_t'
-# zip_path <- file.path("data", "hazards", "gdcyc_cyclone.zip")
