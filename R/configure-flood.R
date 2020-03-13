@@ -2,6 +2,7 @@
 
 library(tidyverse)
 library(gdalUtils)
+library(raster)
 
 source("R/download_grid.R")
 source("R/download_hazard.R")
@@ -27,6 +28,7 @@ overwrite <- FALSE
 if(!file.exists(hazard_path_out) | overwrite) {
   
   hazard_metadata <- drive_get(id = hazard_id)
+  dir.create(file.path("data", "hazards"), recursive = TRUE, showWarnings = FALSE)
   drive_download(hazard_metadata, path = zip_path)
   unzip(zip_path, overwrite = FALSE, exdir = file.path("data", "hazards", hazard_name))
   unlink(zip_path)
@@ -43,7 +45,6 @@ if(!file.exists(hazard_path_out) | overwrite) {
                            reference = empty_grid@file@name, 
                            dstfile = hazard_path_out, 
                            overwrite = overwrite)
-  
   unlink(hazard_path_tmp)
   
   # for the flood layer, values of 999 appear to represent persistent water bodies
@@ -56,7 +57,7 @@ if(!file.exists(hazard_path_out) | overwrite) {
   conus <- 
     USAboundaries::us_boundaries(type = "state", resolution = "high") %>%
     filter(!state_name %in% c("Alaska", "Hawaii") & jurisdiction_type == "state") %>%
-    st_transform(projection(empty_grid)) 
+    sf::st_transform(raster::projection(empty_grid)) 
   
   mask <-
     fasterize::fasterize(sf = conus, raster = empty_grid) %>% # create a mask outside of CONUS
