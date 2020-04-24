@@ -43,6 +43,9 @@ tornado_subset <- tornados %>%
          slat > 25, slat < 40) %>%
   mutate(year = yr)
 
+sum(tornado_subset$loss)
+
+
 # 52 tornadoes matches the number provided in this report: 
 # https://www.nhc.noaa.gov/data/tcr/AL092017_Harvey.pdf
 # Harvey was a prolific tornado producer.  There were 52 tornadoes preliminarily 
@@ -71,14 +74,17 @@ tornado_subset %>%
   ylab("") 
 
 
-# Add the binned Zillow data (I think...)
-# https://drive.google.com/open?id=1MaIr34PpxCjJ0ZTzNPU7MUWhq9B59y-e
 r <- raster("data/zillow/V3_all_counts/temp_slice_pts_temp_inf_area_counts_2015.tif")
 harv_proj <- st_transform(hurricane_harvey, crs = projection(r))
 torn_proj <- st_transform(tornado_subset, crs = projection(r))
 us_proj <- st_transform(us, crs = projection(r))
 flood_proj <- st_read("data/houston-floods.shp") %>%
   st_transform(crs = projection(r))
+
+st_write(torn_proj, "output/harvey_tornadoes.shp", delete_dsn = TRUE)
+st_write(flood_proj, "output/harvey_floods.shp", delete_dsn = TRUE)
+st_write(harv_proj, "output/harvey_centroid_path.shp", delete_dsn = TRUE)
+
 
 focal_extent <- raster::extent(-100, -83, 25, 40)
 focal_r <- raster(focal_extent)
@@ -140,11 +146,29 @@ flood_bbox["xmax"] = flood_bbox["xmax"] + 10000
 flood_bbox["ymin"] = flood_bbox["ymin"] - 70000 
 flood_bbox["ymax"] = flood_bbox["ymax"] + 50000
 
+
+
+# Load/munge gridded flood data ---------------------------------------------
+flood_grid <- raster("data/lowres-harvey-flood.tif")
+flood_grid <- projectRaster(flood_grid, harvey_r)
+masked_flood_grid <- mask(flood_grid, st_crop(us_proj, flood_grid))
+masked_flood_grid <- trim(masked_flood_grid)
+masked_flood_grid[masked_flood_grid < 1] <- NA
+plot(masked_flood_grid)
+
+flood_df <- as.data.frame(masked_flood_grid, xy = TRUE, long = TRUE, 
+                          na.rm = TRUE) %>%
+  as_tibble
+
+
+
+# Visualize the resultant layers ------------------------------------------
+
 p1 <- us_proj %>%
   ggplot(aes(x, y)) + 
   geom_sf(inherit.aes = FALSE, fill = "white", size = .1) + 
   geom_sf(inherit.aes = FALSE, data = st_as_sfc(flood_bbox), 
-          fill = NA) +
+          fill = NA, size = .2) +
   annotate(x = flood_bbox[["xmin"]], y = flood_bbox[["ymax"]], geom = "text", 
            label = "B", vjust = 0, hjust = 0) +
   coord_sf(xlim = c(harvey_bbox["xmin"] + 100000, 
@@ -177,8 +201,7 @@ p2 <- us_proj %>%
   ggplot(aes(x, y)) + 
   theme_minimal() +
   geom_sf(inherit.aes = FALSE, fill = "white", size = .1) + 
-  geom_sf(data = flood_proj, fill = "dodgerblue", color = NA, 
-          inherit.aes = FALSE) + 
+  geom_tile(data = flood_df, alpha = .5, fill = "dodgerblue") + 
   coord_sf(xlim = c(flood_bbox["xmin"], 
                     flood_bbox["xmax"]), 
            ylim = c(flood_bbox["ymin"], 
@@ -199,13 +222,14 @@ p2 <- us_proj %>%
                         breaks = date_label_df$doy, 
                         labels = date_label_df$date, 
                         guide = FALSE) + 
-  scale_size_continuous("Tornado\ninduced\nlosses ($)") + 
+  scale_size_continuous("Tornado\ninduced\nlosses ($)", 
+                        labels = scales::comma) + 
   xlab("") + 
   ylab("") +
   ggtitle("B") + 
   annotate(geom = "text", x = 100000, y = 540000, label = "Hurricane Harvey: centroid path", 
            color = "darkblue", alpha = .6) +
-  annotate(geom = "text", x = 80000, y = 860000, label = "Flood inundation", 
+  annotate(geom = "text", x = -60000, y = 920000, label = "Flood inundation > 1 m", 
            color = "dodgerblue") 
 p2
 ggsave("harvey-houston.png", plot = p2, width = 6, height = 4)
@@ -226,6 +250,11 @@ claims <- vroom("data/openFEMA_claims20190831.csv") %>%
          dateofloss <= as.Date("2017-09-02"), 
          longitude > -100, longitude < -83, 
          latitude > 25, latitude < 40)
+
+sum(claims$amountpaidonbuildingclaim, na.rm = TRUE)
+sum(claims$amountpaidonbuildingclaim > 0, na.rm = TRUE)
+sum(claims$amountpaidoncontentsclaim, na.rm = TRUE)
+sum(claims$amountpaidoncontentsclaim > 0, na.rm = TRUE)
 
 claims %>%
   group_by(dateofloss, longitude, latitude) %>%
