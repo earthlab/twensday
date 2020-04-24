@@ -1,2 +1,11 @@
 *.tif
 *.shp
+harvey_centroid_path.dbf
+harvey_centroid_path.prj
+harvey_centroid_path.shx
+harvey_floods.dbf
+harvey_floods.prj
+harvey_floods.shx
+harvey_tornadoes.dbf
+harvey_tornadoes.prj
+harvey_tornadoes.shx

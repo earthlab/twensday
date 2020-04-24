@@ -25,3 +25,8 @@ vignettes/*.pdf
 # Shiny token, see https://shiny.rstudio.com/articles/shinyapps.html
 rsconnect/
 twensday.Rproj
+harvey-houston.png
+harvey-multipanel-ts.png
+harvey-multipanel.png
+harvey.png
+tampa-tornado-hurricane.png
