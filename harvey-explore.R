@@ -227,15 +227,18 @@ p2 <- us_proj %>%
   xlab("") + 
   ylab("") +
   ggtitle("B") + 
-  annotate(geom = "text", x = 100000, y = 540000, label = "Hurricane Harvey: centroid path", 
-           color = "darkblue", alpha = .6) +
-  annotate(geom = "text", x = -60000, y = 920000, label = "Flood inundation > 1 m", 
+  # annotate(geom = "text", x = 100000, y = 540000, label = "Hurricane Harvey: centroid path", 
+  #          color = "darkblue", alpha = .6) +
+  annotate(geom = "text", x = -60000, y = 920000, label = "Inundation > 1 m", 
            color = "dodgerblue") 
 p2
 ggsave("harvey-houston.png", plot = p2, width = 6, height = 4)
 
 p_joined <- p1 + p2 + plot_layout(nrow = 2)
 ggsave("harvey-multipanel.png", plot = p_joined, width = 6, height = 8)
+ggsave("harvey-multipanel-final.png", plot = p_joined, 
+       width = 8.7, height = 11.6, dpi = 600, units = "cm", scale = 1.4)
+# system("convert harvey-multipanel-final.png harvey-multipanel-final.pdf")
 
 
 
